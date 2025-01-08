@@ -3,7 +3,7 @@ const path = require('path');
 const isDev = require('electron-is-dev');
 
 function createWindow() {
-    // Crear la ventana del navegador.
+    // Crear la ventana del navegador
     const mainWindow = new BrowserWindow({
         width: 1200,
         height: 800,
