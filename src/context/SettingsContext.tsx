@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import Dexie from 'dexie';
 
 interface Currency {
@@ -10,9 +10,17 @@ interface Currency {
   thousandsSeparator: '.' | ',' | ' ';
 }
 
+interface AutoSavingsConfig {
+  enabled: boolean;
+  percentage: number;
+  targetGoalId: string;
+  minimumBalance: number;
+}
+
 interface Settings {
   currency: Currency;
   language: string;
+  autoSavings?: AutoSavingsConfig;
 }
 
 interface SettingsContextType {
@@ -59,6 +67,12 @@ const defaultCurrencies: { [key: string]: Currency } = {
 const defaultSettings: Settings = {
   currency: defaultCurrencies.COP,
   language: 'es',
+  autoSavings: {
+    enabled: false,
+    percentage: 10,
+    targetGoalId: '',
+    minimumBalance: 1000,
+  },
 };
 
 // Extend Dexie with settings store

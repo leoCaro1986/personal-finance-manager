@@ -4,110 +4,141 @@ import {
   Paper,
   Typography,
   Button,
-  TextField,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  Select,
-  MenuItem,
+  TextField,
+  Box,
+  IconButton,
   FormControl,
   InputLabel,
+  Select,
+  MenuItem,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  IconButton,
-  InputAdornment,
+  Alert,
   CircularProgress,
-  Box,
-  Chip,
-  Tooltip,
+  InputAdornment,
 } from '@mui/material';
-import { Add as AddIcon, Delete as DeleteIcon, AddCircleOutline as AddCircleOutlineIcon } from '@mui/icons-material';
+import {
+  Add as AddIcon,
+  Delete as DeleteIcon,
+  Edit as EditIcon,
+} from '@mui/icons-material';
 import { useTransactions } from '../../context/TransactionsContext';
 import { useSettings } from '../../context/SettingsContext';
-import { Transaction, Category, db } from '../../database/db';
+import { Transaction, Category } from '../../types';
+import { db } from '../../database/db';
+
+interface TransactionFormData {
+  type: 'ingreso' | 'gasto';
+  amount: number;
+  category: string;
+  description: string;
+  date: string;
+}
 
 const TransactionsPage: React.FC = () => {
-  const { transactions, addTransaction, deleteTransaction, loading } = useTransactions();
-  const { formatMoney, settings } = useSettings();
-  const [open, setOpen] = useState(false);
-  const [newCategoryDialogOpen, setNewCategoryDialogOpen] = useState(false);
+  const { transactions, loading, addTransaction, deleteTransaction } = useTransactions();
+  const { formatMoney } = useSettings();
+  
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [newCategory, setNewCategory] = useState('');
-  const [newTransaction, setNewTransaction] = useState<Omit<Transaction, 'id' | 'createdAt'>>({
-    type: 'ingreso',
-    amount: 0,
+  const [error, setError] = useState<string | null>(null);
+  const [formData, setFormData] = useState<TransactionFormData>({
+    type: 'gasto',
+    amount: '' as unknown as number,
     category: '',
     description: '',
     date: new Date().toISOString().split('T')[0],
   });
 
   useEffect(() => {
-    loadCategories(newTransaction.type);
-  }, [newTransaction.type]);
+    if (dialogOpen) {
+      loadCategories();
+    }
+  }, [dialogOpen, formData.type]);
 
-  const loadCategories = async (type: 'ingreso' | 'gasto') => {
-    const loadedCategories = await db.getCategories(type);
-    setCategories(loadedCategories);
+  const loadCategories = async () => {
+    try {
+      const allCategories = await db.getCategories();
+      const filteredCategories = allCategories.filter(cat => cat.type === formData.type);
+      setCategories(filteredCategories);
+    } catch (error) {
+      console.error('Error loading categories:', error);
+      setError('Error al cargar las categorías');
+    }
   };
 
-  const handleClickOpen = () => {
-    setOpen(true);
-  };
-
-  const handleClose = () => {
-    setOpen(false);
-    setNewTransaction({
-      type: 'ingreso',
-      amount: 0,
+  const handleOpenDialog = () => {
+    setDialogOpen(true);
+    setFormData({
+      type: 'gasto',
+      amount: '' as unknown as number,
       category: '',
       description: '',
       date: new Date().toISOString().split('T')[0],
     });
+    setError(null);
   };
 
-  const handleNewCategoryClick = () => {
-    setNewCategoryDialogOpen(true);
-  };
-
-  const handleNewCategoryClose = () => {
-    setNewCategoryDialogOpen(false);
-    setNewCategory('');
-  };
-
-  const handleNewCategorySubmit = async () => {
-    if (newCategory.trim()) {
-      await db.addCategory({
-        name: newCategory.trim(),
-        type: newTransaction.type,
-        isDefault: false,
-      });
-      await loadCategories(newTransaction.type);
-      handleNewCategoryClose();
-    }
+  const handleCloseDialog = () => {
+    setDialogOpen(false);
+    setFormData({
+      type: 'gasto',
+      amount: '' as unknown as number,
+      category: '',
+      description: '',
+      date: new Date().toISOString().split('T')[0],
+    });
+    setError(null);
   };
 
   const handleSave = async () => {
-    if (newTransaction.amount && newTransaction.category) {
+    try {
+      const amount = Number(formData.amount);
+      if (!amount || amount <= 0) {
+        setError('El monto debe ser mayor a 0');
+        return;
+      }
+
+      if (!formData.category) {
+        setError('La categoría es requerida');
+        return;
+      }
+
+      await addTransaction({
+        ...formData,
+        date: new Date(formData.date),
+      });
+
+      handleCloseDialog();
+    } catch (error) {
+      console.error('Error saving transaction:', error);
+      setError('Error al guardar la transacción');
+    }
+  };
+
+  const handleDelete = async (transactionId: number) => {
+    if (window.confirm('¿Estás seguro de que deseas eliminar esta transacción?')) {
       try {
-        await addTransaction(newTransaction);
-        handleClose();
+        await deleteTransaction(transactionId);
       } catch (error) {
-        console.error('Error al guardar la transacción:', error);
+        console.error('Error deleting transaction:', error);
+        setError('Error al eliminar la transacción');
       }
     }
   };
 
-  const handleDelete = async (id: number) => {
-    try {
-      await deleteTransaction(id);
-    } catch (error) {
-      console.error('Error al eliminar la transacción:', error);
-    }
+  const calculateBalance = () => {
+    return transactions.reduce((acc, transaction) => {
+      return acc + (transaction.type === 'ingreso' ? transaction.amount : -transaction.amount);
+    }, 0);
   };
 
   if (loading) {
@@ -121,22 +152,30 @@ const TransactionsPage: React.FC = () => {
   return (
     <Grid container spacing={3}>
       <Grid item xs={12}>
-        <Paper sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography component="h1" variant="h5">
-            Transacciones
-          </Typography>
+        <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+          <Typography variant="h4">Transacciones</Typography>
           <Button
             variant="contained"
             color="primary"
             startIcon={<AddIcon />}
-            onClick={handleClickOpen}
+            onClick={handleOpenDialog}
           >
             Nueva Transacción
           </Button>
-        </Paper>
-      </Grid>
+        </Box>
 
-      <Grid item xs={12}>
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+            {error}
+          </Alert>
+        )}
+
+        <Paper sx={{ p: 2, mb: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            Balance Actual: {formatMoney(calculateBalance())}
+          </Typography>
+        </Paper>
+
         <TableContainer component={Paper}>
           <Table>
             <TableHead>
@@ -146,41 +185,29 @@ const TransactionsPage: React.FC = () => {
                 <TableCell>Categoría</TableCell>
                 <TableCell>Descripción</TableCell>
                 <TableCell align="right">Monto</TableCell>
-                <TableCell align="center">Acciones</TableCell>
+                <TableCell align="right">Acciones</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {transactions.map((transaction) => (
                 <TableRow key={transaction.id}>
-                  <TableCell>{transaction.date}</TableCell>
                   <TableCell>
-                    <Typography
-                      color={transaction.type === 'ingreso' ? 'success.main' : 'error.main'}
-                    >
-                      {transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1)}
-                    </Typography>
+                    {new Date(transaction.date).toLocaleDateString()}
                   </TableCell>
                   <TableCell>
-                    <Chip
-                      label={transaction.category}
-                      size="small"
-                      color={transaction.type === 'ingreso' ? 'success' : 'error'}
-                      variant="outlined"
-                    />
+                    {transaction.type === 'ingreso' ? 'Ingreso' : 'Gasto'}
                   </TableCell>
+                  <TableCell>{transaction.category}</TableCell>
                   <TableCell>{transaction.description}</TableCell>
-                  <TableCell align="right">
-                    <Typography
-                      color={transaction.type === 'ingreso' ? 'success.main' : 'error.main'}
-                    >
-                      {formatMoney(transaction.amount)}
-                    </Typography>
+                  <TableCell align="right" sx={{
+                    color: transaction.type === 'ingreso' ? 'success.main' : 'error.main',
+                  }}>
+                    {formatMoney(transaction.amount)}
                   </TableCell>
-                  <TableCell align="center">
+                  <TableCell align="right">
                     <IconButton
                       size="small"
-                      onClick={() => transaction.id && handleDelete(transaction.id)}
-                      color="error"
+                      onClick={() => handleDelete(transaction.id!)}
                     >
                       <DeleteIcon />
                     </IconButton>
@@ -192,89 +219,72 @@ const TransactionsPage: React.FC = () => {
         </TableContainer>
       </Grid>
 
-      {/* Diálogo de Nueva Transacción */}
-      <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+      <Dialog open={dialogOpen} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
         <DialogTitle>Nueva Transacción</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12}>
               <FormControl fullWidth>
                 <InputLabel>Tipo</InputLabel>
                 <Select
-                  value={newTransaction.type}
+                  value={formData.type}
                   label="Tipo"
-                  onChange={(e) => {
-                    const newType = e.target.value as 'ingreso' | 'gasto';
-                    setNewTransaction({ 
-                      ...newTransaction, 
-                      type: newType,
-                      category: '' // Resetear categoría al cambiar el tipo
-                    });
-                  }}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    type: e.target.value as 'ingreso' | 'gasto',
+                    category: '',
+                  })}
                 >
                   <MenuItem value="ingreso">Ingreso</MenuItem>
                   <MenuItem value="gasto">Gasto</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={12}>
               <TextField
-                fullWidth
                 label="Monto"
                 type="number"
+                fullWidth
+                value={formData.amount || ''}
+                onChange={(e) => setFormData({ ...formData, amount: e.target.value ? Number(e.target.value) : '' as unknown as number })}
                 InputProps={{
-                  startAdornment: <InputAdornment position="start">{settings.currency.symbol}</InputAdornment>,
+                  startAdornment: <InputAdornment position="start">$</InputAdornment>,
                 }}
-                value={newTransaction.amount === 0 ? '' : newTransaction.amount}
-                onChange={(e) => {
-                  const value = e.target.value === '' ? 0 : parseFloat(e.target.value);
-                  setNewTransaction({ ...newTransaction, amount: value });
-                }}
-                placeholder="0.00"
               />
             </Grid>
             <Grid item xs={12}>
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                <FormControl fullWidth>
-                  <InputLabel>Categoría</InputLabel>
-                  <Select
-                    value={newTransaction.category}
-                    label="Categoría"
-                    onChange={(e) => setNewTransaction({ ...newTransaction, category: e.target.value })}
-                  >
-                    {categories.map((category) => (
-                      <MenuItem key={category.id} value={category.name}>
-                        {category.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <Tooltip title="Agregar nueva categoría">
-                  <IconButton 
-                    color="primary" 
-                    onClick={handleNewCategoryClick}
-                    sx={{ mt: 1 }}
-                  >
-                    <AddCircleOutlineIcon />
-                  </IconButton>
-                </Tooltip>
-              </Box>
+              <FormControl fullWidth>
+                <InputLabel>Categoría</InputLabel>
+                <Select
+                  value={formData.category}
+                  label="Categoría"
+                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                >
+                  {categories.map((category) => (
+                    <MenuItem key={category.id} value={category.name}>
+                      {category.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
             </Grid>
             <Grid item xs={12}>
               <TextField
-                fullWidth
                 label="Descripción"
-                value={newTransaction.description}
-                onChange={(e) => setNewTransaction({ ...newTransaction, description: e.target.value })}
+                fullWidth
+                multiline
+                rows={2}
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               />
             </Grid>
             <Grid item xs={12}>
               <TextField
-                fullWidth
                 label="Fecha"
                 type="date"
-                value={newTransaction.date}
-                onChange={(e) => setNewTransaction({ ...newTransaction, date: e.target.value })}
+                fullWidth
+                value={formData.date}
+                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                 InputLabelProps={{
                   shrink: true,
                 }}
@@ -283,30 +293,9 @@ const TransactionsPage: React.FC = () => {
           </Grid>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleClose}>Cancelar</Button>
+          <Button onClick={handleCloseDialog}>Cancelar</Button>
           <Button onClick={handleSave} variant="contained" color="primary">
             Guardar
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Diálogo de Nueva Categoría */}
-      <Dialog open={newCategoryDialogOpen} onClose={handleNewCategoryClose}>
-        <DialogTitle>Nueva Categoría</DialogTitle>
-        <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Nombre de la categoría"
-            fullWidth
-            value={newCategory}
-            onChange={(e) => setNewCategory(e.target.value)}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleNewCategoryClose}>Cancelar</Button>
-          <Button onClick={handleNewCategorySubmit} variant="contained" color="primary">
-            Agregar
           </Button>
         </DialogActions>
       </Dialog>

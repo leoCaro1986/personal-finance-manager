@@ -17,6 +17,7 @@ import {
 } from '@mui/material';
 import { useSettings, availableCurrencies } from '../../context/SettingsContext';
 import CategoriesPage from './CategoriesPage';
+import AutoSavingsSettings from './AutoSavingsSettings';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -74,6 +75,7 @@ const SettingsPage: React.FC = () => {
             >
               <Tab label="Moneda" />
               <Tab label="Categorías" />
+              <Tab label="Ahorro Automático" />
             </Tabs>
           </Box>
 
@@ -134,6 +136,10 @@ const SettingsPage: React.FC = () => {
 
           <TabPanel value={activeTab} index={1}>
             <CategoriesPage />
+          </TabPanel>
+
+          <TabPanel value={activeTab} index={2}>
+            <AutoSavingsSettings />
           </TabPanel>
         </Paper>
       </Grid>

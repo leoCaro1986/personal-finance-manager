@@ -1,115 +1,96 @@
 import Dexie, { Table } from 'dexie';
+import { Transaction, Category, SavingsGoal } from '../types';
 
-export interface Transaction {
-  id?: number;
-  type: 'ingreso' | 'gasto';
-  amount: number;
-  category: string;
-  description: string;
-  date: string;
-  createdAt: Date;
-}
-
-export interface Category {
-  id?: number;
-  name: string;
-  type: 'ingreso' | 'gasto';
-  isDefault: boolean;
-}
-
-export class FinanceDatabase extends Dexie {
-  transactions!: Table<Transaction>;
-  categories!: Table<Category>;
+class AppDatabase extends Dexie {
+  transactions!: Table<Transaction, number>;
+  categories!: Table<Category, number>;
+  savingsGoals!: Table<SavingsGoal, number>;
 
   constructor() {
-    super('FinanceDatabase');
-    this.version(2).stores({
-      transactions: '++id, type, category, date, createdAt',
-      categories: '++id, name, type',
+    super('FinanceManagerDB');
+    
+    this.version(1).stores({
+      transactions: '++id, type, amount, category, date, createdAt',
+      categories: '++id, name, type, isDefault, createdAt',
+      savingsGoals: '++id, name, targetAmount, currentAmount, deadline, category, createdAt, completed'
     });
 
-    // Agregar categorías por defecto si no existen
-    this.on('ready', async () => {
-      const categoriesCount = await this.categories.count();
-      if (categoriesCount === 0) {
-        const defaultCategories: Omit<Category, 'id'>[] = [
-          { name: 'Salario', type: 'ingreso', isDefault: true },
-          { name: 'Freelance', type: 'ingreso', isDefault: true },
-          { name: 'Inversiones', type: 'ingreso', isDefault: true },
-          { name: 'Alimentación', type: 'gasto', isDefault: true },
-          { name: 'Transporte', type: 'gasto', isDefault: true },
-          { name: 'Servicios', type: 'gasto', isDefault: true },
-          { name: 'Entretenimiento', type: 'gasto', isDefault: true },
-        ];
-        await this.categories.bulkAdd(defaultCategories);
-      }
+    // Agregar categorías por defecto
+    this.on('populate', () => {
+      this.categories.bulkAdd([
+        { name: 'Salario', type: 'ingreso', isDefault: true, createdAt: new Date() },
+        { name: 'Freelance', type: 'ingreso', isDefault: true, createdAt: new Date() },
+        { name: 'Inversiones', type: 'ingreso', isDefault: true, createdAt: new Date() },
+        { name: 'Alquiler', type: 'gasto', isDefault: true, createdAt: new Date() },
+        { name: 'Servicios', type: 'gasto', isDefault: true, createdAt: new Date() },
+        { name: 'Alimentación', type: 'gasto', isDefault: true, createdAt: new Date() },
+        { name: 'Transporte', type: 'gasto', isDefault: true, createdAt: new Date() },
+        { name: 'Entretenimiento', type: 'gasto', isDefault: true, createdAt: new Date() },
+      ]);
     });
   }
 
-  async addTransaction(transaction: Omit<Transaction, 'id' | 'createdAt'>) {
-    return await this.transactions.add({
+  async addTransaction(transaction: Omit<Transaction, 'id' | 'createdAt'>): Promise<number> {
+    const id = await this.transactions.add({
       ...transaction,
+      date: new Date(transaction.date),
       createdAt: new Date(),
     });
+    return id as number;
   }
 
-  async getTransactions() {
-    return await this.transactions.orderBy('date').reverse().toArray();
+  async getTransactions(): Promise<Transaction[]> {
+    const transactions = await this.transactions.orderBy('date').reverse().toArray();
+    return transactions.map(transaction => ({
+      ...transaction,
+      date: new Date(transaction.date),
+    }));
   }
 
-  async getTransactionsByDateRange(startDate: string, endDate: string) {
-    return await this.transactions
-      .where('date')
-      .between(startDate, endDate)
-      .toArray();
+  async deleteTransaction(id: number): Promise<void> {
+    await this.transactions.delete(id);
   }
 
-  async getTransactionsByType(type: 'ingreso' | 'gasto') {
-    return await this.transactions
-      .where('type')
-      .equals(type)
-      .toArray();
+  async addCategory(category: Omit<Category, 'id' | 'createdAt'>): Promise<number> {
+    const id = await this.categories.add({
+      ...category,
+      createdAt: new Date(),
+    });
+    return id as number;
   }
 
-  async deleteTransaction(id: number) {
-    return await this.transactions.delete(id);
+  async getCategories(): Promise<Category[]> {
+    return await this.categories.toArray();
   }
 
-  async getMonthlyTotals(year: number, month: number) {
-    const startDate = new Date(year, month - 1, 1).toISOString().split('T')[0];
-    const endDate = new Date(year, month, 0).toISOString().split('T')[0];
-    
-    const transactions = await this.getTransactionsByDateRange(startDate, endDate);
-    
-    return transactions.reduce(
-      (acc, curr) => {
-        if (curr.type === 'ingreso') {
-          acc.income += curr.amount;
-        } else {
-          acc.expenses += curr.amount;
-        }
-        return acc;
-      },
-      { income: 0, expenses: 0 }
-    );
+  async deleteCategory(id: number): Promise<void> {
+    await this.categories.delete(id);
   }
 
-  // Métodos para categorías
-  async getCategories(type: 'ingreso' | 'gasto') {
-    return await this.categories
-      .where('type')
-      .equals(type)
-      .toArray();
+  async addSavingsGoal(goal: Omit<SavingsGoal, 'id' | 'createdAt'>): Promise<number> {
+    const id = await this.savingsGoals.add({
+      ...goal,
+      deadline: new Date(goal.deadline),
+      createdAt: new Date(),
+    });
+    return id as number;
   }
 
-  async addCategory(category: Omit<Category, 'id'>) {
-    return await this.categories.add(category);
+  async getSavingsGoals(): Promise<SavingsGoal[]> {
+    const goals = await this.savingsGoals.orderBy('deadline').toArray();
+    return goals.map(goal => ({
+      ...goal,
+      deadline: new Date(goal.deadline),
+    }));
   }
 
-  async deleteCategory(id: number) {
-    return await this.categories.delete(id);
+  async updateSavingsGoal(id: number, updates: Partial<SavingsGoal>): Promise<void> {
+    await this.savingsGoals.update(id, updates);
+  }
+
+  async deleteSavingsGoal(id: number): Promise<void> {
+    await this.savingsGoals.delete(id);
   }
 }
 
-// Exportar una instancia de la base de datos
-export const db = new FinanceDatabase();
+export const db = new AppDatabase();

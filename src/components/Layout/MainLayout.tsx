@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, CssBaseline, Drawer, AppBar, Toolbar, List, Typography, Divider, IconButton, ListItem, ListItemIcon, ListItemText } from '@mui/material';
-import { Menu as MenuIcon, Dashboard, AttachMoney, Timeline, Settings } from '@mui/icons-material';
+import { Menu as MenuIcon, Dashboard, AttachMoney, Timeline, Settings, Savings, Assessment } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 
 const drawerWidth = 240;
@@ -12,7 +12,8 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const menuItems = [
     { text: 'Dashboard', icon: <Dashboard />, path: '/' },
     { text: 'Transacciones', icon: <AttachMoney />, path: '/transactions' },
-    { text: 'Reportes', icon: <Timeline />, path: '/reports' },
+    { text: 'Metas de Ahorro', icon: <Savings />, path: '/savings' },
+    { text: 'Reportes', icon: <Assessment />, path: '/reports' },
     { text: 'Configuración', icon: <Settings />, path: '/settings' },
   ];
 
