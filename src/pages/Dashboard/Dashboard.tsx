@@ -1,12 +1,66 @@
-import React from 'react';
-import { Grid, Paper, Typography, Box } from '@mui/material';
+import React, { useEffect, useState } from 'react';
+import { Grid, Paper, Typography, Box, CircularProgress } from '@mui/material';
 import { BarChart } from '@mui/x-charts';
+import { useTransactions } from '../../context/TransactionsContext';
+import { useSettings } from '../../context/SettingsContext';
+import { db } from '../../database/db';
+
+interface MonthlyData {
+  month: string;
+  income: number;
+  expenses: number;
+}
 
 const Dashboard: React.FC = () => {
-  // Datos de ejemplo para el gráfico
-  const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May'];
-  const ingresos = [2000, 3000, 1500, 2500, 3500];
-  const gastos = [1500, 2000, 1000, 1800, 2200];
+  const { monthlyTotals, loading } = useTransactions();
+  const { formatMoney } = useSettings();
+  const [chartData, setChartData] = useState<MonthlyData[]>([]);
+  const [loadingChart, setLoadingChart] = useState(true);
+
+  useEffect(() => {
+    const loadChartData = async () => {
+      try {
+        const currentDate = new Date();
+        const last5Months: MonthlyData[] = [];
+
+        // Obtener datos de los últimos 5 meses
+        for (let i = 4; i >= 0; i--) {
+          const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
+          const totals = await db.getMonthlyTotals(date.getFullYear(), date.getMonth() + 1);
+          
+          last5Months.push({
+            month: date.toLocaleString('es', { month: 'short' }),
+            income: totals.income,
+            expenses: totals.expenses
+          });
+        }
+
+        setChartData(last5Months);
+      } catch (error) {
+        console.error('Error loading chart data:', error);
+      } finally {
+        setLoadingChart(false);
+      }
+    };
+
+    loadChartData();
+  }, []);
+
+  if (loading || loadingChart) {
+    return (
+      <Grid container justifyContent="center" alignItems="center" style={{ minHeight: '400px' }}>
+        <CircularProgress />
+      </Grid>
+    );
+  }
+
+  const currentDate = new Date().toLocaleDateString('es', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  });
+
+  const balance = monthlyTotals.income - monthlyTotals.expenses;
 
   return (
     <Grid container spacing={3}>
@@ -24,10 +78,10 @@ const Dashboard: React.FC = () => {
             Balance Total
           </Typography>
           <Typography component="p" variant="h4">
-            $3,024.00
+            {formatMoney(balance)}
           </Typography>
           <Typography color="text.secondary" sx={{ flex: 1 }}>
-            al 8 de Enero, 2025
+            al {currentDate}
           </Typography>
         </Paper>
       </Grid>
@@ -46,10 +100,10 @@ const Dashboard: React.FC = () => {
             Ingresos del Mes
           </Typography>
           <Typography component="p" variant="h4">
-            $4,500.00
+            {formatMoney(monthlyTotals.income)}
           </Typography>
           <Typography color="text.secondary" sx={{ flex: 1 }}>
-            +15% vs. mes anterior
+            mes actual
           </Typography>
         </Paper>
       </Grid>
@@ -68,10 +122,10 @@ const Dashboard: React.FC = () => {
             Gastos del Mes
           </Typography>
           <Typography component="p" variant="h4">
-            $2,100.00
+            {formatMoney(monthlyTotals.expenses)}
           </Typography>
           <Typography color="text.secondary" sx={{ flex: 1 }}>
-            -8% vs. mes anterior
+            mes actual
           </Typography>
         </Paper>
       </Grid>
@@ -80,18 +134,28 @@ const Dashboard: React.FC = () => {
       <Grid item xs={12}>
         <Paper sx={{ p: 2 }}>
           <Typography component="h2" variant="h6" color="primary" gutterBottom>
-            Ingresos vs Gastos
+            Ingresos vs Gastos - Últimos 5 meses
           </Typography>
           <Box sx={{ height: 400, width: '100%' }}>
             <BarChart
               width={800}
               height={350}
               series={[
-                { data: ingresos, label: 'Ingresos', color: '#2e7d32' },
-                { data: gastos, label: 'Gastos', color: '#d32f2f' },
+                { 
+                  data: chartData.map(d => d.income),
+                  label: 'Ingresos',
+                  color: '#2e7d32',
+                  valueFormatter: (value) => formatMoney(value),
+                },
+                { 
+                  data: chartData.map(d => d.expenses),
+                  label: 'Gastos',
+                  color: '#d32f2f',
+                  valueFormatter: (value) => formatMoney(value),
+                },
               ]}
               xAxis={[{
-                data: months,
+                data: chartData.map(d => d.month),
                 scaleType: 'band',
               }]}
               slotProps={{
