@@ -28,7 +28,7 @@ git clone [URL_DEL_REPOSITORIO]
 npm install
 
 # Iniciar en modo desarrollo
-npm run dev
+npm run devnpm run dev
 ```
 
 ## Estructura del Proyecto
